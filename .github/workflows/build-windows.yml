@@ -1,10 +1,10 @@
 name: Build ModSecurity on Windows
 
 on:
-  # 1. Izinkan build ini dijalankan manual kapan saja dari tab "Actions"
+  # Izinkan build ini dijalankan manual kapan saja dari tab "Actions"
   workflow_dispatch:
   
-  # 2. Jalankan juga saat Anda push perubahan ke branch 'main' Anda
+  # Jalankan juga saat Anda push perubahan ke branch 'main' Anda
   push:
     branches: [ main ] 
 
@@ -17,37 +17,38 @@ jobs:
     - name: 1. Checkout repository
       uses: actions/checkout@v4
       with:
-        # PENTING: Kita checkout branch 'v3/master' yang berisi kode stabil
+        # Kita checkout branch 'v3/master' yang berisi kode stabil
         ref: 'v3/master' 
         # Ini akan otomatis menjalankan 'git submodule init' dan 'git submodule update'
         submodules: 'recursive'
 
+    # PERUBAHAN 1: Tambahkan 'id' di sini
     - name: 2. Install Visual Studio Build Tools
-      # Menginstal komponen 'VCTools' (C++)
       uses: microsoft/setup-msbuild@v2
+      id: setup_msbuild # <-- ID DITAMBAHKAN DI SINI
       with:
         vs-components: '["Microsoft.VisualStudio.Workload.VCTools"]'
 
-    - name: 3. Install Conan
-      # Menjalankan perintah PowerShell untuk download & install
+    # PERUBAHAN 2: Ganti metode instalasi Conan
+    - name: 3. Install Conan (via pip)
       run: |
-        Invoke-WebRequest -Uri "https://github.com/conan-io/conan/releases/download/2.10.2/conan-2.10.2-windows-x86_64-installer.exe" -OutFile "C:\TEMP\conan-installer.exe"
-        Start-Process -FilePath "C:\TEMP\conan-installer.exe" -ArgumentList "/SP- /VERYSILENT /SUPPRESSMSGBOXES" -Wait
-      shell: powershell
+        echo "Menginstal Conan menggunakan pip..."
+        pip install conan==2.10.2
+        echo "Conan berhasil diinstal."
+      shell: powershell # Gunakan PowerShell untuk menjalankan pip
 
+    # PERUBAHAN 3: Gunakan path dinamis
     - name: 4. Setup Conan Profile
-      # Menjalankan vcvars64.bat untuk setup environment, lalu conan
       run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+        call "${{ steps.setup_msbuild.outputs.vcvars_path }}"
         conan profile detect --force
       shell: cmd
 
+    # PERUBAHAN 4: Gunakan path dinamis
     - name: 5. Build libModSecurity
-      # Menjalankan skrip build 'vcbuild.bat'
       run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+        call "${{ steps.setup_msbuild.outputs.vcvars_path }}"
         vcbuild.bat Release x86_64
-      # 'vcbuild.bat' ada di root, jadi kita jalankan dari sana
       working-directory: ${{ github.workspace }}
       shell: cmd
 
@@ -56,7 +57,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: modsecurity-windows-build
-        # Path ini diambil dari Dockerfile Anda. Seharusnya sudah benar.
         path: |
           build/win32/build/Release/*.dll
           build/win32/build/Release/*.lib
